@@ -20,6 +20,19 @@ export function Reveal({
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+
+    const revealIfInView = () => {
+      const rect = node.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const overlap = Math.min(rect.bottom, vh) - Math.max(rect.top, 0);
+      const minOverlap = Math.min(vh * 0.12, Math.max(rect.height * 0.2, 48));
+      if (overlap >= minOverlap) {
+        setVisible(true);
+        return true;
+      }
+      return false;
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -31,8 +44,24 @@ export function Reveal({
       },
       { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
     );
+
+    const sync = () => {
+      if (revealIfInView()) observer.disconnect();
+    };
+
+    sync();
     observer.observe(node);
-    return () => observer.disconnect();
+
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("load", sync);
+    const raf = requestAnimationFrame(sync);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("load", sync);
+    };
   }, []);
 
   return (
