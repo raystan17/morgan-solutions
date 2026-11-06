@@ -370,10 +370,27 @@ let tx=null;lb.addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive
 // "get a quote for this" preselects the service
 const sel=document.getElementById('s');document.querySelectorAll('.more[data-svc]').forEach(a=>a.addEventListener('click',()=>{const t=a.dataset.svc.toLowerCase();
  const o=[...sel.options].find(o=>t.includes('fence')?o.text.startsWith('Deck'):t.includes('pressure')?o.text.startsWith('Pressure'):t.includes('landscap')?o.text.startsWith('Landscaping'):false);if(o)sel.value=o.value}));
-// quote form: real POST to FormSubmit; only if FORM_ENDPOINT is a REPLACE_WITH_ placeholder, open a pre-filled email instead
-const qf=document.getElementById('qform');qf.addEventListener('submit',e=>{if(!qf.action.includes('REPLACE_WITH_'))return;e.preventDefault();
+// quote form: sends in the background (FormSubmit AJAX) with visible sending / success / error states.
+// No JS or any problem = the normal form POST still works; on error the visitor gets a pre-filled email link and the phone number.
+const qf=document.getElementById('qform');
+qf.addEventListener('submit',e=>{
+ if(qf.action.includes('REPLACE_WITH_')){e.preventDefault();mailFallback(false);return}
+ e.preventDefault();
+ if(!qf.reportValidity())return;
+ const btn=qf.querySelector('button[type=submit]'),ok=qf.querySelector('.ok'),old=btn.innerHTML;
+ if(qf.elements._honey&&qf.elements._honey.value)return;
+ btn.disabled=true;btn.textContent='Sending\u2026';ok.style.display='none';
+ const data={};[...qf.elements].forEach(el=>{if(el.name&&el.name!=='_honey'&&el.name!=='_next')data[el.name]=el.value});
+ const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),15000);
+ fetch('https://formsubmit.co/ajax/morganexteriorsolution@gmail.com',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data),signal:ctl.signal})
+ .then(r=>r.json().catch(()=>({success:'false'})).then(j=>({ok:r.ok,j})))
+ .then(({ok:good,j})=>{clearTimeout(t);if(good&&(j.success===true||j.success==='true')){location.href='thanks.html'}else{throw new Error(j&&j.message||'failed')}})
+ .catch(err=>{clearTimeout(t);console.warn('quote form:',err&&err.message);btn.disabled=false;btn.innerHTML=old;mailFallback(true)});
+});
+function mailFallback(failed){
  const v=n=>qf.elements[n].value.trim();const body=`Name: ${v('name')}\nPhone: ${v('phone')}\nEmail: ${v('email')}\nTown: ${v('town')}\nService: ${v('service')}\n\n${v('details')}`;
- location.href='mailto:morganexteriorsolution@gmail.com?subject='+encodeURIComponent('Quote request - '+v('service'))+'&body='+encodeURIComponent(body);
- const ok=qf.querySelector('.ok');ok.textContent='Your email app should open with your request filled in. If it does not, call or text (204) 570-1912.';ok.style.display='block'});
+ const link='mailto:morganexteriorsolution@gmail.com?subject='+encodeURIComponent('Quote request - '+v('service'))+'&body='+encodeURIComponent(body);
+ const ok=qf.querySelector('.ok');ok.innerHTML=(failed?'Sorry, that did not go through. ':'')+'<a href="'+link+'">Tap here to email your request</a>, or call or text <a href="tel:+12045701912">(204) 570-1912</a>.';ok.style.display='block';
+}
 </script>
 </body></html>
