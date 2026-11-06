@@ -324,11 +324,11 @@ footer{background:#071a33}footer .fl p{color:#c4d3e3;max-width:380px}footer .log
 <p class="big" style="opacity:.8">Send a quick request or call. We&rsquo;ll follow up with a clear plan. Photos of the job help us quote faster &mdash; text them to (204) 570-1912 or email them.</p>
 <a class="bigcall" href="tel:+12045701912"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg><span><small>Call or text</small><b>(204) 570-1912</b></span></a>
 <ul class="qinfo"><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><a href="mailto:morganexteriorsolution@gmail.com">morganexteriorsolution@gmail.com</a></li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Brandon &middot; Rivers &middot; Ninette &middot; Minnedosa</li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Open 24 hours &middot; call anytime</li></ul></div>
-<!-- Quote form posts to FormSubmit -> morganexteriorsolution@gmail.com (inbox confirmed by Jayden, Nov 2 2026). FormSubmit needs a one-time activation:
-     after deploying, send one test request and click the activation email in that inbox. If FORM_ENDPOINT ever goes back to a
-     REPLACE_WITH_ placeholder, the script below opens a pre-filled email instead, so no request is lost. -->
-<form class="q rv" id="qform" action="https://formsubmit.co/morganexteriorsolution@gmail.com" method="POST" aria-label="Quote request">
-<input type="hidden" name="_subject" value="New quote request - morgan exterior website"><input type="hidden" name="_template" value="table">
+<!-- Quote form -> morganexteriorsolution@gmail.com. Primary: FlowForm (no-signup endpoint, action below = no-JS fallback).
+     Script tries FlowForm (x2), then FormSubmit as backup, then a pre-filled email link + phone, so no request is lost
+     even if a provider is down (FormSubmit had a multi-day outage Nov 2026, hence the redundancy). -->
+<form class="q rv" id="qform" action="https://flowform.to/morganexteriorsolution@gmail.com" method="POST" aria-label="Quote request">
+<input type="hidden" name="_subject" value="New quote request - morgan exterior website">
 <input type="hidden" name="_next" value="https://morgan-exterior-solutions.vercel.app/thanks.html"><input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
 <div class="row"><div><label for="n">Name</label><input id="n" name="name" autocomplete="name" required></div><div><label for="p">Phone</label><input id="p" name="phone" type="tel" autocomplete="tel" required></div></div>
 <div class="row"><div><label for="e">Email (optional)</label><input id="e" name="email" type="email" autocomplete="email"></div><div><label for="t">Town</label><input id="t" name="town" autocomplete="address-level2" placeholder="Brandon"></div></div>
@@ -370,22 +370,40 @@ let tx=null;lb.addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive
 // "get a quote for this" preselects the service
 const sel=document.getElementById('s');document.querySelectorAll('.more[data-svc]').forEach(a=>a.addEventListener('click',()=>{const t=a.dataset.svc.toLowerCase();
  const o=[...sel.options].find(o=>t.includes('fence')?o.text.startsWith('Deck'):t.includes('pressure')?o.text.startsWith('Pressure'):t.includes('landscap')?o.text.startsWith('Landscaping'):false);if(o)sel.value=o.value}));
-// quote form: sends in the background (FormSubmit AJAX) with visible sending / success / error states.
-// No JS or any problem = the normal form POST still works; on error the visitor gets a pre-filled email link and the phone number.
-const qf=document.getElementById('qform');
-qf.addEventListener('submit',e=>{
- if(qf.action.includes('REPLACE_WITH_')){e.preventDefault();mailFallback(false);return}
+// quote form: background send with visible sending / success / error states.
+// Provider chain so one outage can't lose a lead: FlowForm (retried) -> FormSubmit -> pre-filled email link + phone.
+// No JS = the plain form POST to FlowForm (form action) still works and redirects to thanks.html.
+const DEST='morganexteriorsolution@gmail.com';
+function timedFetch(url,opts,ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);return fetch(url,{...opts,signal:c.signal}).finally(()=>clearTimeout(t))}
+async function tryFlowForm(d){
+ const fd=new FormData();Object.entries(d).forEach(([k,v])=>fd.append(k,v));
+ fd.append('_subject','New quote request - morgan exterior website');
+ fd.append('_next','https://morgan-exterior-solutions.vercel.app/thanks.html');
+ const r=await timedFetch('https://flowform.to/'+DEST,{method:'POST',headers:{'Accept':'application/json'},body:fd},12000);
+ const txt=await r.text();let j=null;try{j=JSON.parse(txt)}catch(e){}
+ if(r.ok&&(j?j.success===true||j.success==='true':/success/i.test(txt)))return true;
+ throw new Error('FlowForm '+(j&&j.message||r.status));
+}
+async function tryFormSubmit(d){
+ const r=await timedFetch('https://formsubmit.co/ajax/'+DEST,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({...d,_subject:'New quote request - morgan exterior website',_template:'table'})},10000);
+ const j=await r.json().catch(()=>({success:'false'}));
+ if(r.ok&&(j.success===true||j.success==='true'))return true;
+ throw new Error('FormSubmit '+(j&&j.message||r.status));
+}
+const qf=document.getElementById('qform');let sending=false;
+qf.addEventListener('submit',async e=>{
  e.preventDefault();
- if(!qf.reportValidity())return;
- const btn=qf.querySelector('button[type=submit]'),ok=qf.querySelector('.ok'),old=btn.innerHTML;
+ if(sending||!qf.reportValidity())return;
  if(qf.elements._honey&&qf.elements._honey.value)return;
- btn.disabled=true;btn.textContent='Sending\u2026';ok.style.display='none';
- const data={};[...qf.elements].forEach(el=>{if(el.name&&el.name!=='_honey'&&el.name!=='_next')data[el.name]=el.value});
- const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),15000);
- fetch('https://formsubmit.co/ajax/morganexteriorsolution@gmail.com',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data),signal:ctl.signal})
- .then(r=>r.json().catch(()=>({success:'false'})).then(j=>({ok:r.ok,j})))
- .then(({ok:good,j})=>{clearTimeout(t);if(good&&(j.success===true||j.success==='true')){location.href='thanks.html'}else{throw new Error(j&&j.message||'failed')}})
- .catch(err=>{clearTimeout(t);console.warn('quote form:',err&&err.message);btn.disabled=false;btn.innerHTML=old;mailFallback(true)});
+ const v=n=>qf.elements[n].value.trim();
+ const d={name:v('name'),phone:v('phone'),email:v('email'),town:v('town'),service:v('service'),details:v('details')};
+ const btn=qf.querySelector('button[type=submit]'),ok=qf.querySelector('.ok'),old=btn.innerHTML;
+ sending=true;btn.disabled=true;btn.textContent='Sending\u2026';ok.style.display='none';
+ let sent=false,errs=[];
+ for(let i=0;i<2&&!sent;i++){try{await tryFlowForm(d);sent=true}catch(err){errs.push(err&&err.message);if(i===0)await new Promise(r=>setTimeout(r,1500))}}
+ if(!sent){try{await tryFormSubmit(d);sent=true}catch(err){errs.push(err&&err.message)}}
+ if(sent){location.href='thanks.html';return}
+ console.warn('quote form:',errs.join(' | '));sending=false;btn.disabled=false;btn.innerHTML=old;mailFallback(true);
 });
 function mailFallback(failed){
  const v=n=>qf.elements[n].value.trim();const body=`Name: ${v('name')}\nPhone: ${v('phone')}\nEmail: ${v('email')}\nTown: ${v('town')}\nService: ${v('service')}\n\n${v('details')}`;
